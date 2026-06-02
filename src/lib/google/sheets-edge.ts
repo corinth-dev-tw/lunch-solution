@@ -34,7 +34,7 @@ async function signRS256(payload: string, pemKey: string): Promise<string> {
   return base64url(new Uint8Array(sig))
 }
 
-async function getAccessToken(): Promise<string> {
+export async function getAccessToken(): Promise<string> {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!
   const key = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!.replace(/\\n/g, '\n')
   const scope = 'https://www.googleapis.com/auth/spreadsheets'
@@ -86,9 +86,7 @@ export function isSheetsConfigured(): boolean {
   )
 }
 
-const SPREADSHEET_ID = () => process.env.GOOGLE_SPREADSHEET_ID!
-
-const DAY_NAMES = ['日', '一', '二', '三', '四', '五', '六']
+export const MASTER_SPREADSHEET_ID = () => process.env.GOOGLE_SPREADSHEET_ID!
 
 const DAILY_HEADERS = [
   '訂單編號', '時間', '取餐日期', '取餐地點',
@@ -97,8 +95,9 @@ const DAILY_HEADERS = [
   '優惠碼', '折扣', '應付金額', '備註', '狀態', '推播',
 ]
 
-export async function ensureDailyTab(dateStr: string): Promise<void> {
-  const id = SPREADSHEET_ID()
+// spreadsheetId = the RESTAURANT's own sheet (not the master sheet)
+export async function ensureDailyTab(spreadsheetId: string, dateStr: string): Promise<void> {
+  const id = spreadsheetId
 
   // List existing sheets
   const meta = await sheetsRequest(`/${id}?fields=sheets.properties.title,sheets.properties.sheetId`) as {
@@ -114,7 +113,7 @@ export async function ensureDailyTab(dateStr: string): Promise<void> {
   })
 
   // Write headers
-  await sheetsRequest(`/${id}/values/${encodeURIComponent(`${dateStr}!A1:R1`)}?valueInputOption=RAW`, {
+  await sheetsRequest(`/${id}/values/${encodeURIComponent(`${dateStr}!A1:R1`)}?valueInputOption=RAW`,  {
     method: 'PUT',
     body: JSON.stringify({ values: [DAILY_HEADERS] }),
   })
@@ -154,7 +153,7 @@ export async function ensureDailyTab(dateStr: string): Promise<void> {
   }
 }
 
-export interface SiammoreOrder {
+export interface OrderRow {
   orderNumber: string
   deliveryDate: string
   locationName: string
@@ -172,8 +171,9 @@ export interface SiammoreOrder {
   note: string
 }
 
-export async function writeSiammoreOrder(order: SiammoreOrder): Promise<void> {
-  await ensureDailyTab(order.deliveryDate)
+// Write an order to the RESTAURANT's own sheet (spreadsheetId from registry)
+export async function writeOrder(spreadsheetId: string, order: OrderRow): Promise<void> {
+  await ensureDailyTab(spreadsheetId, order.deliveryDate)
 
   const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })
   const row = [
@@ -185,22 +185,31 @@ export async function writeSiammoreOrder(order: SiammoreOrder): Promise<void> {
   ]
 
   await sheetsRequest(
-    `/${SPREADSHEET_ID()}/values/${encodeURIComponent(`${order.deliveryDate}!A:R`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `/${spreadsheetId}/values/${encodeURIComponent(`${order.deliveryDate}!A:R`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: 'POST', body: JSON.stringify({ values: [row] }) }
   )
 }
 
-export async function updateOrderStatus(dateStr: string, orderNumber: string, status: string): Promise<void> {
-  const id = SPREADSHEET_ID()
+export async function updateOrderStatus(
+  spreadsheetId: string,
+  dateStr: string,
+  orderNumber: string,
+  status: string
+): Promise<void> {
   const res = await sheetsRequest(
-    `/${id}/values/${encodeURIComponent(`${dateStr}!A:A`)}?majorDimension=ROWS`
+    `/${spreadsheetId}/values/${encodeURIComponent(`${dateStr}!A:A`)}?majorDimension=ROWS`
   ) as { values?: string[][] }
   const rows = res.values ?? []
   const rowIndex = rows.findIndex((r) => r[0] === orderNumber)
   if (rowIndex < 1) return
 
   await sheetsRequest(
-    `/${id}/values/${encodeURIComponent(`${dateStr}!Q${rowIndex + 1}`)}?valueInputOption=RAW`,
+    `/${spreadsheetId}/values/${encodeURIComponent(`${dateStr}!Q${rowIndex + 1}`)}?valueInputOption=RAW`,
     { method: 'PUT', body: JSON.stringify({ values: [[status]] }) }
   )
 }
+
+// Keep backward-compat alias used by old siammore routes (will be removed)
+export const writeSiammoreOrder = (order: OrderRow) =>
+  writeOrder(MASTER_SPREADSHEET_ID(), order)
+export type SiammoreOrder = OrderRow
