@@ -9,7 +9,9 @@ function randomHex(bytes = 16): string {
 }
 
 export async function GET(req: NextRequest) {
-  const redirect = req.nextUrl.searchParams.get('redirect') ?? '/'
+  const rawRedirect = req.nextUrl.searchParams.get('redirect') ?? '/'
+  // Only allow same-origin relative paths to prevent open redirect attacks
+  const redirect = /^\/(?:[^/\\]|$)/.test(rawRedirect) ? rawRedirect : '/'
   const state = randomHex()
   const nonce = randomHex()
 

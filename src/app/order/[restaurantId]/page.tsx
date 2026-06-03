@@ -26,6 +26,7 @@ export default function OrderPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
+  const [orderError, setOrderError] = useState<string | null>(null)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -50,6 +51,9 @@ export default function OrderPage() {
   async function handleSubmit(couponCode: string, note: string) {
     if (!session) { setShowLoginModal(true); return }
     setSubmitting(true)
+    setOrderError(null)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10000)
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
@@ -62,14 +66,20 @@ export default function OrderPage() {
           couponCode: couponCode || undefined,
           specialNote: note || undefined,
         }),
+        signal: controller.signal,
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setOrderNumber(data.order.order_number)
       setCart([])
     } catch (e) {
-      alert(e instanceof Error ? e.message : '訂購失敗，請再試一次')
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        setOrderError('請求逾時，請再試一次')
+      } else {
+        setOrderError(e instanceof Error ? e.message : '訂購失敗，請再試一次')
+      }
     } finally {
+      clearTimeout(timeout)
       setSubmitting(false)
     }
   }
@@ -139,7 +149,12 @@ export default function OrderPage() {
         </div>
 
         {/* Cart */}
-        <div className="lg:sticky lg:top-20 self-start">
+        <div className="lg:sticky lg:top-20 self-start space-y-3">
+          {orderError && (
+            <div className="bg-red-500/10 border border-red-400/30 rounded-xl px-4 py-3 text-red-400 text-sm">
+              {orderError}
+            </div>
+          )}
           <OrderCart
             cart={cart}
             deliveryFee={0}

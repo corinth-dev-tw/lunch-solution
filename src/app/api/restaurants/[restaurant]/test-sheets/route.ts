@@ -58,11 +58,12 @@ export async function GET(
       message: `✅ 成功寫入 ${config.name_zh} 的 Google Sheet！請查看 ${tomorrow} 分頁`,
     })
   } catch (e) {
+    console.error(`[test-sheets] write error for ${restaurant}:`, e)
     return NextResponse.json({
       configured: true,
       restaurantFound: true,
       sheetsReady: false,
-      error: String(e),
+      error: 'Google Sheets write failed',
       hint: '請確認已將 Service Account Email 加入該餐廳 Sheet 的「共用」編輯權限',
     }, { status: 500 })
   }
