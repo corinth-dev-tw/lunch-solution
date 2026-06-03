@@ -16,12 +16,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: Update npm to match local version
-        run: npm install -g npm@latest
+          cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        # Use npm install instead of npm ci to handle platform-specific optional
+        # packages (e.g. @emnapi/runtime wasm32 bindings from unrs-resolver)
+        # whose lockfile entries differ between macOS and Linux.
+        run: npm install --prefer-offline
 
       - name: Build (OpenNext → Cloudflare)
         run: npm run cf:build
