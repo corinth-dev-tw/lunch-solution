@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
@@ -27,10 +27,30 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   cfg:     '系統設定錯誤，請聯絡管理員',
 }
 
-export default function HomePage() {
+// Separate component so useSearchParams is inside a Suspense boundary
+function AuthErrorBanner() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [dismissed, setDismissed] = useState(false)
   const authError = searchParams.get('error')
+
+  if (!authError || dismissed) return null
+
+  return (
+    <div className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between gap-3 bg-red-500/90 backdrop-blur px-4 py-3 text-white text-sm">
+      <span>{AUTH_ERROR_MESSAGES[authError] ?? '登入失敗，請再試一次'}</span>
+      <button
+        onClick={() => { setDismissed(true); router.replace('/') }}
+        className="shrink-0 font-medium underline underline-offset-2 hover:no-underline"
+      >
+        關閉
+      </button>
+    </div>
+  )
+}
+
+export default function HomePage() {
+  const router = useRouter()
   const restaurantSectionRef = useRef<HTMLDivElement>(null)
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -38,7 +58,6 @@ export default function HomePage() {
   const [loadingRestaurants, setLoadingRestaurants] = useState(false)
   const [showRestaurants, setShowRestaurants] = useState(false)
   const [locations, setLocations] = useState<Location[]>([])
-  const [dismissedError, setDismissedError] = useState(false)
 
   useEffect(() => {
     fetch('/api/locations')
@@ -67,18 +86,10 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-gray-950">
-      {/* Auth error banner */}
-      {authError && !dismissedError && (
-        <div className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between gap-3 bg-red-500/90 backdrop-blur px-4 py-3 text-white text-sm">
-          <span>{AUTH_ERROR_MESSAGES[authError] ?? '登入失敗，請再試一次'}</span>
-          <button
-            onClick={() => { setDismissedError(true); router.replace('/') }}
-            className="shrink-0 font-medium underline underline-offset-2 hover:no-underline"
-          >
-            關閉
-          </button>
-        </div>
-      )}
+      {/* Auth error banner — Suspense required by Next.js for useSearchParams */}
+      <Suspense fallback={null}>
+        <AuthErrorBanner />
+      </Suspense>
 
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 bg-gray-950/80 backdrop-blur border-b border-white/5">
