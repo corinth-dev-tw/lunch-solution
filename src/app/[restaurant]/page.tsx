@@ -2,19 +2,13 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Image from 'next/image'
-import { useParams } from 'next/navigation'
-import { format, addDays, startOfDay } from 'date-fns'
+import { useParams, useSearchParams } from 'next/navigation'
+import { format, addDays, startOfDay, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale'
-import { ChevronDown, ChevronLeft, CheckCircle, ShoppingBag, AlertCircle } from 'lucide-react'
+import { ChevronDown, ChevronLeft, CheckCircle, ShoppingBag, AlertCircle, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { XINYI_LOCATIONS } from '@/lib/constants/locations'
 import type { RestaurantConfig, MenuItemConfig } from '@/lib/google/registry'
-
-const LOCATIONS = [
-  '台北101辦公大樓',
-  '台北交易廣場',
-  '世界貿易中心',
-  '信義區松高路16號3樓（自取）',
-]
 
 function getWeekdays(): Date[] {
   const today = startOfDay(new Date())
@@ -27,13 +21,21 @@ function getWeekdays(): Date[] {
   return days
 }
 
-// Simple coupon table — extend to API lookup when needed
 const COUPON_CODES: Record<string, number> = { LUNCH50: 50, NEWUSER: 100, THAI10: 80 }
 
 type Step = 'order' | 'checkout' | 'success'
 
+interface LineSession {
+  displayName: string
+  pictureUrl?: string
+  memberId?: string
+}
+
+const CART_KEY = 'lunch_pending_cart'
+
 export default function RestaurantPage() {
   const { restaurant } = useParams<{ restaurant: string }>()
+  const searchParams = useSearchParams()
   const weekdays = useMemo(getWeekdays, [])
 
   const [config, setConfig] = useState<RestaurantConfig | null>(null)
@@ -43,10 +45,35 @@ export default function RestaurantPage() {
 
   const [step, setStep] = useState<Step>('order')
   const [cart, setCart] = useState<Record<string, number>>({})
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [selectedLocation, setSelectedLocation] = useState(LOCATIONS[0])
+  const [session, setSession] = useState<LineSession | null>(null)
+
+  // Initialise date and location from URL query params
+  const initLocation = useMemo(() => {
+    const locationId = searchParams.get('location')
+    if (!locationId) return null
+    const match = XINYI_LOCATIONS.find((l) => l.id === locationId)
+    return match?.name_zh ?? null
+  }, [searchParams])
+
+  const initDate = useMemo(() => {
+    const dateStr = searchParams.get('date')
+    if (!dateStr) return null
+    try {
+      const d = parseISO(dateStr)
+      return isNaN(d.getTime()) ? null : d
+    } catch {
+      return null
+    }
+  }, [searchParams])
+
+  const [selectedDate, setSelectedDate] = useState<Date | null>(initDate)
+  const [selectedLocation, setSelectedLocation] = useState<string>(
+    initLocation ?? XINYI_LOCATIONS[0].name_zh
+  )
+  const [selectedTime, setSelectedTime] = useState<string>('')
   const [dateOpen, setDateOpen] = useState(false)
   const [locationOpen, setLocationOpen] = useState(false)
+  const [timeOpen, setTimeOpen] = useState(false)
   const [note, setNote] = useState('')
 
   // Checkout fields
@@ -61,18 +88,55 @@ export default function RestaurantPage() {
     orderNumber: string; total: number; sheetsWritten: boolean; devMode?: boolean
   } | null>(null)
 
+  // Load config + menu + session in parallel
   useEffect(() => {
-    fetch(`/api/restaurants/${restaurant}/config`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.config) { setNotFound(true); return }
-        setConfig(data.config)
-        setMenu(data.menu ?? [])
-      })
-      .catch(() => setNotFound(true))
-      .finally(() => setLoading(false))
+    async function load() {
+      const [configRes, sessionRes] = await Promise.all([
+        fetch(`/api/restaurants/${restaurant}/config`),
+        fetch('/api/auth/session'),
+      ])
+
+      if (!configRes.ok) { setNotFound(true); setLoading(false); return }
+      const configData = await configRes.json()
+      if (!configData.config) { setNotFound(true); setLoading(false); return }
+      setConfig(configData.config)
+      setMenu(configData.menu ?? [])
+
+      if (sessionRes.ok) {
+        const { session: s } = await sessionRes.json()
+        if (s) {
+          setSession(s)
+          setName((prev) => prev || s.displayName)
+        }
+      }
+
+      setLoading(false)
+    }
+    load()
   }, [restaurant])
 
+  // Set default time when config loads
+  useEffect(() => {
+    if (config?.delivery_times?.length && !selectedTime) {
+      setSelectedTime(config.delivery_times[0])
+    }
+  }, [config, selectedTime])
+
+  // Restore cart saved before LINE login redirect
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(CART_KEY)
+      if (saved) {
+        const { cart: savedCart } = JSON.parse(saved) as { cart: Record<string, number> }
+        if (savedCart && Object.keys(savedCart).length > 0) setCart(savedCart)
+        sessionStorage.removeItem(CART_KEY)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const locations = XINYI_LOCATIONS.map((l) => l.name_zh)
   const bentos = menu.filter((m) => m.category === 'bento')
   const drinks = menu.filter((m) => m.category === 'drink')
   const sides = menu.filter((m) => m.category === 'side')
@@ -96,6 +160,19 @@ export default function RestaurantPage() {
     setCouponMsg(`省下 $${Math.min(v, subtotal)}！`)
   }
 
+  function goToCheckout() {
+    if (!session) {
+      // Save cart and redirect to LINE login, returning here after auth
+      try {
+        sessionStorage.setItem(CART_KEY, JSON.stringify({ cart }))
+      } catch { /* ignore */ }
+      const returnUrl = `/${restaurant}?location=${searchParams.get('location') ?? ''}&date=${searchParams.get('date') ?? ''}`
+      window.location.href = `/api/auth/line?redirect=${encodeURIComponent(returnUrl)}`
+      return
+    }
+    setStep('checkout')
+  }
+
   async function handleSubmit() {
     if (!name || !phone || !selectedDate) return
     setSubmitting(true)
@@ -108,6 +185,7 @@ export default function RestaurantPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           deliveryDate: format(selectedDate, 'yyyy-MM-dd'),
+          deliveryTime: selectedTime,
           locationName: selectedLocation,
           customerName: name,
           company,
@@ -164,6 +242,12 @@ export default function RestaurantPage() {
             <span className="text-gray-500">取餐日期</span>
             <span>{selectedDate && format(selectedDate, 'yyyy/MM/dd (EEE)', { locale: zhTW })}</span>
           </div>
+          {selectedTime && (
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-500">取餐時間</span>
+              <span>{selectedTime}</span>
+            </div>
+          )}
           <div className="flex justify-between text-sm mb-1">
             <span className="text-gray-500">取餐地點</span>
             <span className="text-right max-w-[160px]">{selectedLocation}</span>
@@ -202,6 +286,14 @@ export default function RestaurantPage() {
             <ChevronLeft size={22} />
           </button>
           <h1 className="font-bold text-gray-800">確認訂單</h1>
+          {session && (
+            <div className="ml-auto flex items-center gap-2">
+              {session.pictureUrl && (
+                <img src={session.pictureUrl} alt="" className="w-7 h-7 rounded-full" />
+              )}
+              <span className="text-gray-500 text-xs">{session.displayName}</span>
+            </div>
+          )}
         </header>
 
         <div className="max-w-lg mx-auto px-4 py-5 pb-32 space-y-5">
@@ -232,6 +324,7 @@ export default function RestaurantPage() {
             </div>
             <div className="p-4 space-y-1 text-sm">
               <div className="flex justify-between"><span className="text-gray-500">日期</span><span>{selectedDate && format(selectedDate, 'yyyy/MM/dd (EEE)', { locale: zhTW })}</span></div>
+              {selectedTime && <div className="flex justify-between"><span className="text-gray-500">時間</span><span>{selectedTime}</span></div>}
               <div className="flex justify-between"><span className="text-gray-500">地點</span><span>{selectedLocation}</span></div>
             </div>
           </div>
@@ -288,6 +381,9 @@ export default function RestaurantPage() {
   }
 
   // ── Order page ────────────────────────────────────────────────────────────
+  const deliveryTimes = config.delivery_times ?? ['11:30', '12:00', '12:30']
+  const canCheckout = totalQty > 0 && !!selectedDate && !!selectedTime
+
   return (
     <div className="min-h-screen bg-[#fdf9f0]">
       {/* Hero banner */}
@@ -304,17 +400,25 @@ export default function RestaurantPage() {
               <p className="text-white/80 text-xs">{config.address} · {config.phone}</p>
               {config.tagline && <p className="text-amber-300 text-xs font-medium mt-0.5">{config.tagline}</p>}
             </div>
+            {session && (
+              <div className="ml-auto flex items-center gap-2">
+                {session.pictureUrl && (
+                  <img src={session.pictureUrl} alt="" className="w-8 h-8 rounded-full border-2 border-white/30" />
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <div className="max-w-lg mx-auto px-4 pt-5 pb-32 space-y-5">
-        {/* Date + Location */}
+        {/* Date + Location + Time */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
+          {/* Date */}
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">📅 取餐日期（僅限平日）</label>
             <div className="relative">
-              <button onClick={() => { setDateOpen(!dateOpen); setLocationOpen(false) }}
+              <button onClick={() => { setDateOpen(!dateOpen); setLocationOpen(false); setTimeOpen(false) }}
                 className={cn('w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm transition-colors',
                   selectedDate ? 'border-amber-400 bg-amber-50 text-gray-800' : 'border-gray-200 text-gray-400')}>
                 <span>{selectedDate ? format(selectedDate, 'yyyy/MM/dd (EEE)', { locale: zhTW }) : '選擇日期'}</span>
@@ -333,17 +437,47 @@ export default function RestaurantPage() {
               )}
             </div>
           </div>
+
+          {/* Time */}
+          {deliveryTimes.length > 0 && (
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block flex items-center gap-1">
+                <Clock size={11} /> 取餐時間
+              </label>
+              <div className="relative">
+                <button onClick={() => { setTimeOpen(!timeOpen); setDateOpen(false); setLocationOpen(false) }}
+                  className={cn('w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm transition-colors',
+                    selectedTime ? 'border-amber-400 bg-amber-50 text-gray-800' : 'border-gray-200 text-gray-400')}>
+                  <span>{selectedTime || '選擇時段'}</span>
+                  <ChevronDown size={16} className={cn('transition-transform text-gray-400', timeOpen && 'rotate-180')} />
+                </button>
+                {timeOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden z-20">
+                    {deliveryTimes.map((t) => (
+                      <button key={t} onClick={() => { setSelectedTime(t); setTimeOpen(false) }}
+                        className={cn('w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition-colors',
+                          selectedTime === t ? 'text-amber-600 font-medium bg-amber-50' : 'text-gray-700')}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Location */}
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">📍 取餐地點</label>
             <div className="relative">
-              <button onClick={() => { setLocationOpen(!locationOpen); setDateOpen(false) }}
+              <button onClick={() => { setLocationOpen(!locationOpen); setDateOpen(false); setTimeOpen(false) }}
                 className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-amber-400 bg-amber-50 text-gray-800 text-sm">
                 <span>{selectedLocation}</span>
                 <ChevronDown size={16} className={cn('transition-transform text-gray-400', locationOpen && 'rotate-180')} />
               </button>
               {locationOpen && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden z-20">
-                  {LOCATIONS.map((l) => (
+                  {locations.map((l) => (
                     <button key={l} onClick={() => { setSelectedLocation(l); setLocationOpen(false) }}
                       className={cn('w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition-colors',
                         selectedLocation === l ? 'text-amber-600 font-medium bg-amber-50' : 'text-gray-700')}>
@@ -389,12 +523,15 @@ export default function RestaurantPage() {
           <p className="text-xs text-gray-400">共 {totalQty} 項</p>
           <p className="font-black text-xl text-gray-900">NT$ {subtotal}</p>
         </div>
-        <button onClick={() => setStep('checkout')} disabled={totalQty === 0 || !selectedDate}
+        <button
+          onClick={goToCheckout}
+          disabled={!canCheckout}
           className={cn('flex items-center gap-2 px-6 py-3.5 rounded-xl font-bold text-sm transition-all',
-            totalQty > 0 && selectedDate
+            canCheckout
               ? 'bg-[#f0a500] hover:bg-[#d89400] text-white shadow-lg shadow-amber-200 hover:scale-[1.02]'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed')}>
-          <ShoppingBag size={16} />確認訂單
+          <ShoppingBag size={16} />
+          {session ? '確認訂單' : '登入並訂購'}
         </button>
       </div>
     </div>
