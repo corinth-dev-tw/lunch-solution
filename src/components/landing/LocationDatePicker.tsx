@@ -14,6 +14,7 @@ interface LocationDatePickerProps {
   onSelectLocation: (location: Location) => void
   onSelectDate: (date: Date) => void
   onConfirm: () => void
+  locations?: Location[]
 }
 
 export default function LocationDatePicker({
@@ -22,6 +23,7 @@ export default function LocationDatePicker({
   onSelectLocation,
   onSelectDate,
   onConfirm,
+  locations = XINYI_LOCATIONS,
 }: LocationDatePickerProps) {
   const [locationOpen, setLocationOpen] = useState(false)
   const [dateOpen, setDateOpen] = useState(false)
@@ -51,7 +53,7 @@ export default function LocationDatePicker({
           </button>
           {locationOpen && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-gray-900/95 backdrop-blur border border-white/20 rounded-xl overflow-hidden z-50 shadow-2xl">
-              {XINYI_LOCATIONS.map((loc) => (
+              {locations.map((loc) => (
                 <button
                   key={loc.id}
                   onClick={() => { onSelectLocation(loc); setLocationOpen(false) }}

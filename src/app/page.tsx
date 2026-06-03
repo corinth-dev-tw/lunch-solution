@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
@@ -27,6 +27,14 @@ export default function HomePage() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [loadingRestaurants, setLoadingRestaurants] = useState(false)
   const [showRestaurants, setShowRestaurants] = useState(false)
+  const [locations, setLocations] = useState<Location[]>([])
+
+  useEffect(() => {
+    fetch('/api/locations')
+      .then((r) => r.json())
+      .then((d) => { if (d.locations?.length) setLocations(d.locations) })
+      .catch(() => {}) // silently fall back to default locations in LocationDatePicker
+  }, [])
 
   async function handleConfirm() {
     if (!selectedLocation || !selectedDate) return
@@ -43,7 +51,7 @@ export default function HomePage() {
   function handleSelectRestaurant(restaurant: Restaurant) {
     if (!selectedLocation || !selectedDate) return
     const dateStr = format(selectedDate, 'yyyy-MM-dd')
-    router.push(`/order/${restaurant.id}?location=${selectedLocation.id}&date=${dateStr}`)
+    router.push(`/${restaurant.id}?location=${selectedLocation.id}&date=${dateStr}`)
   }
 
   return (
@@ -95,6 +103,7 @@ export default function HomePage() {
               onSelectLocation={setSelectedLocation}
               onSelectDate={setSelectedDate}
               onConfirm={handleConfirm}
+              locations={locations.length > 0 ? locations : undefined}
             />
           </div>
         </div>
