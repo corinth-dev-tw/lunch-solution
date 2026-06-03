@@ -83,6 +83,10 @@ GOOGLE_SPREADSHEET_ID=1BxiMVs0XRA...
 
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 RESTAURANT_API_KEY=your_secret_key_for_restaurant_dashboard
+
+# 32+ random bytes, base64 or hex — used to HMAC-sign session cookies
+# Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+COOKIE_SECRET=your_32_byte_random_secret
 ```
 
 ---
@@ -152,7 +156,9 @@ My Orders (/my-orders)
 curl -X PATCH https://yourdomain.com/api/orders/{ORDER_ID}/status \
   -H "x-restaurant-key: your_secret_key" \
   -H "Content-Type: application/json" \
-  -d '{"status": "preparing"}'
+  -d '{"status": "preparing", "restaurantId": "siammore"}'
 ```
+
+The `restaurantId` field is required and must match the order's restaurant — this prevents one restaurant from updating another's orders.
 
 Status flow: `pending → confirmed → preparing → ready → delivered`

@@ -12,7 +12,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { status }: { status: OrderStatus } = await req.json()
+  const body: { status: OrderStatus; restaurantId: string } = await req.json()
+  const { status, restaurantId } = body
+
+  if (!restaurantId) {
+    return NextResponse.json({ error: 'restaurantId required' }, { status: 400 })
+  }
+
   const validStatuses: OrderStatus[] = ['confirmed', 'preparing', 'ready', 'delivered', 'cancelled']
   if (!validStatuses.includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
@@ -20,10 +26,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const supabase = await createServiceClient()
 
+  // Single query: ownership check + update in one round-trip
   const { data: order, error } = await supabase
     .from('orders')
     .update({ status })
     .eq('id', id)
+    .eq('restaurant_id', restaurantId)
     .select(`*, order_items(*), members(line_user_id, display_name), restaurants(name_zh)`)
     .single()
 
