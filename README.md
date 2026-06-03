@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 信義午餐 (Lunch Solution)
 
-## Getting Started
+A lunch pre-ordering platform for Xinyi District office workers. Built with Next.js 15, deployed on Cloudflare Workers, with Cloudflare D1 as the source of truth and Google Sheets as the restaurant operations interface.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- 🗺️ **3D Mapbox map** of Xinyi District with interactive building markers
+- 📅 **Date & location picker** — select your office building and pickup date
+- 🍱 **Restaurant menu browsing** — browse bento boxes, drinks, and sides
+- 🔐 **LINE Login** — one-tap authentication with LINE
+- 🎫 **Coupon codes** — validated server-side against D1
+- 📝 **Order tracking** — view your order history
+- 📲 **LINE Flex Messages** — real-time order status notifications
+- 📊 **Restaurant operations** — each restaurant manages orders in their own Google Sheet
+
+## Tech Stack
+
+| Layer | Tech |
+|-------|------|
+| Framework | Next.js 15 (App Router), React 19, TypeScript 5 |
+| Styling | Tailwind CSS v4 |
+| Auth | LINE Login OAuth 2.0 + signed JWT cookies (`jose`) |
+| Database | Cloudflare D1 (SQLite) |
+| Sheets | Google Sheets API (restaurant daily tabs, menu input) |
+| Messaging | LINE Messaging API (Flex Messages) |
+| Map | Mapbox GL JS |
+| Deploy | Cloudflare Workers (OpenNext) |
+
+## Architecture
+
+```
+User Journey:
+Landing (/) → 3D Map → pick location/date → click restaurant
+   │
+   ▼
+/{slug} → browse menu → LINE login → checkout
+   │
+   ▼
+POST /api/orders
+   ├── Writes order to D1 (source of truth)
+   ├── Writes order to restaurant's Google Sheet (daily tab)
+   ├── Validates & logs coupon usage
+   └── Sends LINE Flex Message "pending"
+
+Staff updates status in Sheet
+   │
+   ▼
+Google Apps Script → POST /api/webhooks/sheet-status
+   ├── Updates D1 order status
+   ├── Updates restaurant sheet status
+   └── Sends LINE Flex Message to customer
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Quick Start
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+See [SETUP.md](./SETUP.md) for full configuration (D1, Google Sheets, LINE, Mapbox, Cloudflare).
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Local development |
+| `npm run build` | Next.js production build |
+| `npm run cf:build` | Cloudflare Workers build (OpenNext) |
+| `npm run deploy` | Deploy to Cloudflare |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## License
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Private — All rights reserved.

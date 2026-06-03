@@ -7,11 +7,11 @@ export interface Location {
 }
 
 export interface Restaurant {
-  id: string
-  name: string
+  id: string              // slug, e.g. "siammore"
+  name: string            // same as slug
   name_zh: string
-  description: string
-  image_url: string
+  description: string     // tagline
+  image_url: string       // banner_path
   location_ids: string[]
   available_days: number[] // 0=Sun, 1=Mon, ..., 5=Fri
   cutoff_hour: number // orders cut off at this hour the day before
@@ -63,7 +63,7 @@ export type OrderStatus =
   | 'confirmed'
   | 'preparing'
   | 'ready'
-  | 'delivered'
+  | 'paid'
   | 'cancelled'
 
 export interface OrderItem {
@@ -101,4 +101,5 @@ export interface LineProfile {
   displayName: string
   pictureUrl?: string
   email?: string
+  language?: string
 }

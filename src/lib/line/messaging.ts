@@ -3,12 +3,12 @@ import { Order, OrderStatus } from '@/types'
 const LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push'
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
-  pending: '⏳ 待確認',
-  confirmed: '✅ 已確認',
-  preparing: '👨‍🍳 備餐中',
-  ready: '🎉 可取餐',
-  delivered: '✔️ 已送達',
-  cancelled: '❌ 已取消',
+  pending: '待確認',
+  confirmed: '已確認',
+  preparing: '備餐中',
+  ready: '可取餐',
+  paid: '已付款',
+  cancelled: '已取消',
 }
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
@@ -16,11 +16,11 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
   confirmed: '#00B900',
   preparing: '#FF8C00',
   ready: '#00B900',
-  delivered: '#555555',
+  paid: '#555555',
   cancelled: '#cc0000',
 }
 
-function buildOrderFlexMessage(order: Order, status: OrderStatus) {
+export function buildOrderFlexMessage(order: Order, status: OrderStatus) {
   const statusLabel = STATUS_LABELS[status]
   const statusColor = STATUS_COLORS[status]
   const itemsText = order.items
@@ -39,7 +39,7 @@ function buildOrderFlexMessage(order: Order, status: OrderStatus) {
         contents: [
           {
             type: 'text',
-            text: '🍱 午餐訂單通知',
+            text: '午餐訂單通知',
             weight: 'bold',
             color: '#ffffff',
             size: 'lg',
@@ -140,14 +140,16 @@ function buildOrderFlexMessage(order: Order, status: OrderStatus) {
 export async function pushOrderStatus(
   lineUserId: string,
   order: Order,
-  status: OrderStatus
+  status: OrderStatus,
+  channelAccessToken?: string
 ): Promise<void> {
   const message = buildOrderFlexMessage(order, status)
+  const token = channelAccessToken || process.env.LINE_MESSAGING_CHANNEL_ACCESS_TOKEN
   const res = await fetch(LINE_PUSH_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.LINE_MESSAGING_CHANNEL_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
       to: lineUserId,

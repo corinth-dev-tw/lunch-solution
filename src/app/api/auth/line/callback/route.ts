@@ -1,6 +1,7 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { exchangeCodeForToken, getLineProfile } from '@/lib/line/auth'
+import { signSession } from '@/lib/auth'
+import { upsertMember } from '@/lib/google/registry'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
@@ -17,12 +18,19 @@ export async function GET(req: NextRequest) {
     const accessToken = await exchangeCodeForToken(code)
     const profile = await getLineProfile(accessToken)
 
-    const session = {
+    const sessionPayload = {
       lineUserId: profile.userId,
       displayName: profile.displayName,
       pictureUrl: profile.pictureUrl ?? null,
-      memberId: profile.userId, // use LINE user ID as member ID without DB
+      memberId: profile.userId,
     }
+
+    // Upsert member to Master Sheet (best-effort, non-blocking)
+    upsertMember(profile).catch((err) => {
+      console.error('Failed to upsert member to sheet:', err)
+    })
+
+    const token = await signSession(sessionPayload)
 
     const response = NextResponse.redirect(new URL(redirectAfter, req.url))
     const cookieOpts = {
@@ -32,7 +40,7 @@ export async function GET(req: NextRequest) {
       sameSite: 'lax' as const,
       path: '/',
     }
-    response.cookies.set('lunch_session', JSON.stringify(session), cookieOpts)
+    response.cookies.set('lunch_session', token, cookieOpts)
     response.cookies.delete('line_oauth_state')
     response.cookies.delete('line_oauth_nonce')
     response.cookies.delete('line_redirect_after')

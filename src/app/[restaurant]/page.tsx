@@ -5,9 +5,10 @@ import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import { format, addDays, startOfDay } from 'date-fns'
 import { zhTW } from 'date-fns/locale'
-import { ChevronDown, ChevronLeft, CheckCircle, ShoppingBag, AlertCircle } from 'lucide-react'
+import { ChevronDown, ChevronLeft, CheckCircle, ShoppingBag, AlertCircle, ClipboardList, Calendar, Gift, User, MapPin, ChefHat, Salad, CupSoda, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { RestaurantConfig, MenuItemConfig } from '@/lib/google/registry'
+import LoginButton from '@/components/line/LoginButton'
 
 const LOCATIONS = [
   '台北101辦公大樓',
@@ -16,25 +17,15 @@ const LOCATIONS = [
   '信義區松高路16號3樓（自取）',
 ]
 
-function getWeekdays(): Date[] {
-  const today = startOfDay(new Date())
-  const days: Date[] = []
-  for (let i = 1; i <= 30; i++) {
-    const d = addDays(today, i)
-    const dow = d.getDay()
-    if (dow !== 0 && dow !== 6) days.push(d)
-  }
-  return days
-}
+import { getAvailableDates } from '@/lib/utils'
 
-// Simple coupon table — extend to API lookup when needed
-const COUPON_CODES: Record<string, number> = { LUNCH50: 50, NEWUSER: 100, THAI10: 80 }
+
 
 type Step = 'order' | 'checkout' | 'success'
 
 export default function RestaurantPage() {
   const { restaurant } = useParams<{ restaurant: string }>()
-  const weekdays = useMemo(getWeekdays, [])
+  const weekdays = useMemo(getAvailableDates, [])
 
   const [config, setConfig] = useState<RestaurantConfig | null>(null)
   const [menu, setMenu] = useState<MenuItemConfig[]>([])
@@ -49,6 +40,10 @@ export default function RestaurantPage() {
   const [locationOpen, setLocationOpen] = useState(false)
   const [note, setNote] = useState('')
 
+  // Session
+  const [session, setSession] = useState<{ displayName: string; pictureUrl?: string } | null>(null)
+  const [showLoginModal, setShowLoginModal] = useState(false)
+
   // Checkout fields
   const [name, setName] = useState('')
   const [company, setCompany] = useState('')
@@ -58,19 +53,30 @@ export default function RestaurantPage() {
   const [couponMsg, setCouponMsg] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [orderResult, setOrderResult] = useState<{
-    orderNumber: string; total: number; sheetsWritten: boolean; devMode?: boolean
+    orderNumber: string; total: number
   } | null>(null)
 
   useEffect(() => {
-    fetch(`/api/restaurants/${restaurant}/config`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.config) { setNotFound(true); return }
-        setConfig(data.config)
-        setMenu(data.menu ?? [])
-      })
-      .catch(() => setNotFound(true))
-      .finally(() => setLoading(false))
+    async function load() {
+      const [configRes, sessionRes] = await Promise.all([
+        fetch(`/api/restaurants/${restaurant}/config`),
+        fetch('/api/auth/session'),
+      ])
+      const data = configRes.ok ? await configRes.json() : {}
+      if (!data.config) { setNotFound(true); setLoading(false); return }
+      setConfig(data.config)
+      setMenu(data.menu ?? [])
+
+      if (sessionRes.ok) {
+        const sessionData = await sessionRes.json()
+        setSession(sessionData.session)
+        if (sessionData.session?.displayName) {
+          setName(sessionData.session.displayName)
+        }
+      }
+      setLoading(false)
+    }
+    load()
   }, [restaurant])
 
   const bentos = menu.filter((m) => m.category === 'bento')
@@ -88,39 +94,48 @@ export default function RestaurantPage() {
     })
   }
 
-  function applyCoupon() {
-    const v = COUPON_CODES[couponCode.toUpperCase()]
-    if (!v) { setCouponMsg('優惠券不存在'); setDiscount(0); return }
-    if (subtotal < 200) { setCouponMsg('最低消費 $200 才可使用'); setDiscount(0); return }
-    setDiscount(Math.min(v, subtotal))
-    setCouponMsg(`省下 $${Math.min(v, subtotal)}！`)
+  async function applyCoupon() {
+    if (!couponCode.trim()) return
+    setCouponMsg('')
+    try {
+      const res = await fetch(`/api/coupons/validate?code=${encodeURIComponent(couponCode)}&subtotal=${subtotal}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setDiscount(data.discount)
+      setCouponMsg(`省下 NT$${data.discount}！`)
+    } catch (e: unknown) {
+      setCouponMsg(e instanceof Error ? e.message : '優惠券無效')
+      setDiscount(0)
+    }
   }
 
   async function handleSubmit() {
+    if (!session) { setShowLoginModal(true); return }
     if (!name || !phone || !selectedDate) return
     setSubmitting(true)
     const items = menu
       .filter((m) => (cart[m.id] ?? 0) > 0)
-      .map((m) => ({ name: m.name_zh, qty: cart[m.id]!, price: m.price, category: m.category }))
+      .map((m) => ({ id: m.id, name_zh: m.name_zh, qty: cart[m.id]!, price: m.price, category: m.category }))
     try {
-      const res = await fetch(`/api/restaurants/${restaurant}/order`, {
+      const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          restaurantSlug: restaurant,
+          locationId: selectedLocation,
           deliveryDate: format(selectedDate, 'yyyy-MM-dd'),
-          locationName: selectedLocation,
-          customerName: name,
-          company,
-          phone,
           items,
           couponCode: couponCode || undefined,
           discount: discount || undefined,
           note,
+          customerName: name,
+          company,
+          phone,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setOrderResult(data)
+      setOrderResult(data.order)
       setStep('success')
     } catch (e) {
       alert(e instanceof Error ? e.message : '訂購失敗，請再試一次')
@@ -173,16 +188,9 @@ export default function RestaurantPage() {
             <span className="text-green-600">NT$ {orderResult.total}</span>
           </div>
         </div>
-        {orderResult.devMode && (
-          <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-4">
-            開發模式：Google Sheets 未設定，訂單未寫入試算表
-          </p>
-        )}
-        {orderResult.sheetsWritten && (
-          <p className="text-xs text-green-600 bg-green-50 rounded-lg px-3 py-2 mb-4">
-            ✅ 訂單已寫入 Google Sheets
-          </p>
-        )}
+        <p className="text-xs text-green-600 bg-green-50 rounded-lg px-3 py-2 mb-4 flex items-center gap-1">
+          <CheckCircle size={14} /> 訂單已確認，LINE 通知已發送
+        </p>
         <button
           onClick={() => { setStep('order'); setCart({}); setOrderResult(null) }}
           className="bg-[#f0a500] hover:bg-[#d89400] text-white font-bold px-8 py-3 rounded-xl transition-colors"
@@ -196,7 +204,7 @@ export default function RestaurantPage() {
   // ── Checkout ─────────────────────────────────────────────────────────────
   if (step === 'checkout') {
     return (
-      <div className="min-h-screen bg-[#fdf9f0]">
+      <div className="min-h-screen bg-[#fdf9f0] text-gray-800">
         <header className="bg-white border-b border-gray-100 sticky top-0 z-30 px-4 py-3 flex items-center gap-3">
           <button onClick={() => setStep('order')} className="text-gray-400 hover:text-gray-700">
             <ChevronLeft size={22} />
@@ -208,7 +216,7 @@ export default function RestaurantPage() {
           {/* Summary */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-              <h2 className="font-bold text-gray-700 text-sm">📋 訂單內容</h2>
+              <h2 className="font-bold text-gray-700 text-sm flex items-center gap-1"><ClipboardList size={14} /> 訂單內容</h2>
             </div>
             <div className="p-4 space-y-2">
               {menu.filter((m) => (cart[m.id] ?? 0) > 0).map((m) => (
@@ -228,7 +236,7 @@ export default function RestaurantPage() {
           {/* Delivery info */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-              <h2 className="font-bold text-gray-700 text-sm">📅 取餐資訊</h2>
+              <h2 className="font-bold text-gray-700 text-sm flex items-center gap-1"><Calendar size={14} /> 取餐資訊</h2>
             </div>
             <div className="p-4 space-y-1 text-sm">
               <div className="flex justify-between"><span className="text-gray-500">日期</span><span>{selectedDate && format(selectedDate, 'yyyy/MM/dd (EEE)', { locale: zhTW })}</span></div>
@@ -239,14 +247,14 @@ export default function RestaurantPage() {
           {/* Coupon */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-              <h2 className="font-bold text-gray-700 text-sm">🎁 優惠碼</h2>
+              <h2 className="font-bold text-gray-700 text-sm flex items-center gap-1"><Gift size={14} /> 優惠碼</h2>
             </div>
             <div className="p-4">
               <div className="flex gap-2">
                 <input value={couponCode}
                   onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setDiscount(0); setCouponMsg('') }}
                   placeholder="輸入優惠碼"
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-400" />
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-amber-400" />
                 <button onClick={applyCoupon} className="bg-amber-500 hover:bg-amber-400 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors">套用</button>
               </div>
               {couponMsg && <p className={cn('text-xs mt-1.5', discount > 0 ? 'text-green-600' : 'text-red-500')}>{couponMsg}</p>}
@@ -256,7 +264,7 @@ export default function RestaurantPage() {
           {/* Customer */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-              <h2 className="font-bold text-gray-700 text-sm">👤 訂購人資訊</h2>
+              <h2 className="font-bold text-gray-700 text-sm flex items-center gap-1"><User size={14} /> 訂購人資訊</h2>
             </div>
             <div className="p-4 space-y-3">
               {[
@@ -266,8 +274,8 @@ export default function RestaurantPage() {
               ].map((f) => (
                 <div key={f.label}>
                   <label className="text-xs text-gray-500 mb-1 block">{f.label}</label>
-                  <input value={f.value} onChange={(e) => f.onChange(e.target.value)} placeholder={f.placeholder}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-amber-400" />
+                  <input data-testid={`field-${f.label.replace(/\s*\*\s*/g, '').replace(/\s*\/\s*/g, '-')}`} value={f.value} onChange={(e) => f.onChange(e.target.value)} placeholder={f.placeholder}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:border-amber-400" />
                 </div>
               ))}
             </div>
@@ -280,7 +288,7 @@ export default function RestaurantPage() {
               name && phone
                 ? 'bg-[#f0a500] hover:bg-[#d89400] text-white shadow-lg shadow-amber-200'
                 : 'bg-gray-100 text-gray-400 cursor-not-allowed')}>
-            {submitting ? '處理中...' : `✅ 確認訂購 NT$${total}`}
+            {submitting ? '處理中...' : `確認訂購 NT$${total}`}
           </button>
         </div>
       </div>
@@ -312,7 +320,7 @@ export default function RestaurantPage() {
         {/* Date + Location */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">📅 取餐日期（僅限平日）</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block flex items-center gap-1"><Calendar size={12} /> 取餐日期（僅限平日）</label>
             <div className="relative">
               <button onClick={() => { setDateOpen(!dateOpen); setLocationOpen(false) }}
                 className={cn('w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm transition-colors',
@@ -334,7 +342,7 @@ export default function RestaurantPage() {
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">📍 取餐地點</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block flex items-center gap-1"><MapPin size={12} /> 取餐地點</label>
             <div className="relative">
               <button onClick={() => { setLocationOpen(!locationOpen); setDateOpen(false) }}
                 className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-amber-400 bg-amber-50 text-gray-800 text-sm">
@@ -358,13 +366,13 @@ export default function RestaurantPage() {
 
         {/* Menu sections */}
         {[
-          { label: '🍱 便當', items: bentos },
-          { label: '🥗 小食', items: sides },
-          { label: '🥤 加購飲品', items: drinks },
+          { label: '便當', icon: ChefHat, items: bentos },
+          { label: '小食', icon: Salad, items: sides },
+          { label: '加購飲品', icon: CupSoda, items: drinks },
         ].filter((s) => s.items.length > 0).map((section) => (
           <div key={section.label}>
             <div className="flex items-center gap-2 mb-3">
-              <h2 className="font-bold text-gray-800">{section.label}</h2>
+              <h2 className="font-bold text-gray-800 flex items-center gap-1"><section.icon size={16} className="text-amber-500" /> {section.label}</h2>
             </div>
             <div className="space-y-3">
               {section.items.map((item) => (
@@ -376,10 +384,10 @@ export default function RestaurantPage() {
 
         {/* Note */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-          <label className="text-xs font-medium text-gray-500 mb-2 block">📝 備註</label>
+          <label className="text-xs font-medium text-gray-500 mb-2 block flex items-center gap-1"><FileText size={12} /> 備註</label>
           <textarea value={note} onChange={(e) => setNote(e.target.value)}
             placeholder="3份不要辣 / 過敏請註明…" rows={3}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-amber-400" />
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 resize-none focus:outline-none focus:border-amber-400" />
         </div>
       </div>
 
@@ -389,7 +397,7 @@ export default function RestaurantPage() {
           <p className="text-xs text-gray-400">共 {totalQty} 項</p>
           <p className="font-black text-xl text-gray-900">NT$ {subtotal}</p>
         </div>
-        <button onClick={() => setStep('checkout')} disabled={totalQty === 0 || !selectedDate}
+        <button data-testid="checkout-btn" onClick={() => setStep('checkout')} disabled={totalQty === 0 || !selectedDate}
           className={cn('flex items-center gap-2 px-6 py-3.5 rounded-xl font-bold text-sm transition-all',
             totalQty > 0 && selectedDate
               ? 'bg-[#f0a500] hover:bg-[#d89400] text-white shadow-lg shadow-amber-200 hover:scale-[1.02]'
@@ -397,13 +405,35 @@ export default function RestaurantPage() {
           <ShoppingBag size={16} />確認訂單
         </button>
       </div>
+
+      {/* Login modal */}
+      {showLoginModal && (
+        <div data-testid="login-modal"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          onClick={() => setShowLoginModal(false)}
+        >
+          <div
+            className="bg-white border border-gray-100 rounded-2xl p-8 max-w-sm w-full text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-gray-900 font-bold text-xl mb-2">需要先登入</h2>
+            <p className="text-gray-500 text-sm mb-6">
+              請用 LINE 登入後即可訂購，訂單進度會直接推播給你。
+            </p>
+            <LoginButton
+              redirectAfter={`/${restaurant}`}
+              className="w-full flex items-center justify-center gap-3 bg-[#00B900] hover:bg-[#009900] text-white font-bold px-6 py-3 rounded-xl transition-colors"
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 function ProductCard({ item, qty, onQty }: { item: MenuItemConfig; qty: number; onQty: (d: number) => void }) {
   return (
-    <div className={cn('bg-white rounded-2xl shadow-sm border overflow-hidden flex transition-all',
+    <div data-testid={`menu-item-${item.id}`} className={cn('bg-white rounded-2xl shadow-sm border overflow-hidden flex transition-all',
       qty > 0 ? 'border-amber-300' : 'border-gray-100')}>
       {item.image_path && (
         <div className="relative w-24 h-24 flex-shrink-0">
@@ -418,13 +448,13 @@ function ProductCard({ item, qty, onQty }: { item: MenuItemConfig; qty: number; 
         <div className="flex items-center justify-between mt-2">
           <span className="font-bold text-amber-500">NT${item.price}</span>
           <div className="flex items-center gap-2">
-            <button onClick={() => onQty(-1)} disabled={qty === 0}
+            <button data-testid={`remove-${item.id}`} onClick={() => onQty(-1)} disabled={qty === 0}
               className={cn('w-7 h-7 rounded-full border-2 font-bold flex items-center justify-center transition-all',
                 qty > 0 ? 'border-amber-400 text-amber-500 hover:bg-amber-50' : 'border-gray-200 text-gray-300 cursor-not-allowed')}>
               −
             </button>
             <span className="w-5 text-center font-bold text-sm text-gray-800">{qty}</span>
-            <button onClick={() => onQty(1)}
+            <button data-testid={`add-${item.id}`} onClick={() => onQty(1)}
               className="w-7 h-7 rounded-full bg-amber-400 hover:bg-amber-500 text-white font-bold flex items-center justify-center transition-colors">
               +
             </button>

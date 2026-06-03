@@ -86,7 +86,7 @@ export function isSheetsConfigured(): boolean {
   )
 }
 
-export const MASTER_SPREADSHEET_ID = () => process.env.GOOGLE_SPREADSHEET_ID!
+// NOTE: GOOGLE_SPREADSHEET_ID is no longer used. D1 is the source of truth.
 
 const DAILY_HEADERS = [
   '訂單編號', '時間', '取餐日期', '取餐地點',
@@ -94,6 +94,27 @@ const DAILY_HEADERS = [
   '便當內容', '便當數量', '加購飲品', '小計',
   '優惠碼', '折扣', '應付金額', '備註', '狀態', '推播',
 ]
+
+// Status mapping between DB enum (English) and sheet labels (Chinese)
+export const STATUS_TO_LABEL: Record<string, string> = {
+  pending: '待確認',
+  confirmed: '已確認',
+  preparing: '備餐中',
+  ready: '可取餐',
+  paid: '已付款',
+  cancelled: '已取消',
+}
+
+export const LABEL_TO_STATUS: Record<string, string> = {
+  '待確認': 'pending',
+  '已確認': 'confirmed',
+  '備餐中': 'preparing',
+  '可取餐': 'ready',
+  '已付款': 'paid',
+  '已取消': 'cancelled',
+}
+
+const STATUS_DROPDOWN_VALUES = Object.values(STATUS_TO_LABEL)
 
 // spreadsheetId = the RESTAURANT's own sheet (not the master sheet)
 export async function ensureDailyTab(spreadsheetId: string, dateStr: string): Promise<void> {
@@ -147,6 +168,24 @@ export async function ensureDailyTab(spreadsheetId: string, dateStr: string): Pr
               fields: 'gridProperties.frozenRowCount',
             },
           },
+          {
+            setDataValidation: {
+              range: {
+                sheetId,
+                startRowIndex: 1,
+                startColumnIndex: 16, // column Q (status)
+                endColumnIndex: 17,
+              },
+              rule: {
+                condition: {
+                  type: 'ONE_OF_LIST',
+                  values: STATUS_DROPDOWN_VALUES.map((v) => ({ userEnteredValue: v })),
+                },
+                showUi: true,
+                strict: true,
+              },
+            },
+          },
         ],
       }),
     })
@@ -181,7 +220,7 @@ export async function writeOrder(spreadsheetId: string, order: OrderRow): Promis
     order.customerName, order.company, order.phone, order.lineUserId,
     order.bentoItems, order.bentoQty, order.drinkItems || '',
     order.subtotal, order.couponCode || '', order.discount || 0, order.total,
-    order.note || '', '⚪ 待確認', '',
+    order.note || '', STATUS_TO_LABEL['pending'], '',
   ]
 
   await sheetsRequest(
@@ -203,13 +242,71 @@ export async function updateOrderStatus(
   const rowIndex = rows.findIndex((r) => r[0] === orderNumber)
   if (rowIndex < 1) return
 
+  const label = STATUS_TO_LABEL[status] ?? status
   await sheetsRequest(
     `/${spreadsheetId}/values/${encodeURIComponent(`${dateStr}!Q${rowIndex + 1}`)}?valueInputOption=RAW`,
-    { method: 'PUT', body: JSON.stringify({ values: [[status]] }) }
+    { method: 'PUT', body: JSON.stringify({ values: [[label]] }) }
   )
 }
 
-// Keep backward-compat alias used by old siammore routes (will be removed)
-export const writeSiammoreOrder = (order: OrderRow) =>
-  writeOrder(MASTER_SPREADSHEET_ID(), order)
-export type SiammoreOrder = OrderRow
+// ── Generic write helpers ──────────────────────────────────────────────────────
+
+export async function appendRows(
+  spreadsheetId: string,
+  range: string,
+  values: string[][]
+): Promise<void> {
+  await sheetsRequest(
+    `/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: 'POST', body: JSON.stringify({ values }) }
+  )
+}
+
+export async function updateRow(
+  spreadsheetId: string,
+  range: string,
+  values: string[][]
+): Promise<void> {
+  await sheetsRequest(
+    `/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
+    { method: 'PUT', body: JSON.stringify({ values }) }
+  )
+}
+
+// ── Read menu from restaurant's own sheet ─────────────────────────────────────
+
+export interface MenuItemFromSheet {
+  id: string
+  name_zh: string
+  description: string
+  price: number
+  category: 'bento' | 'drink' | 'side'
+  image_path: string
+  available: boolean
+  sort_order: number
+}
+
+export async function readMenuFromSheet(
+  spreadsheetId: string
+): Promise<MenuItemFromSheet[]> {
+  const res = await sheetsRequest(
+    `/${spreadsheetId}/values/${encodeURIComponent('Menu!A2:H500')}?majorDimension=ROWS`
+  ) as { values?: string[][] }
+  const rows = res.values ?? []
+
+  return rows
+    .filter((r) => r.length > 0 && (r[7] ?? 'TRUE').toUpperCase() !== 'FALSE')
+    .map((r) => ({
+      id: (r[0] ?? '').trim(),
+      name_zh: (r[1] ?? '').trim(),
+      description: (r[2] ?? '').trim(),
+      price: parseInt((r[3] ?? '0').trim(), 10),
+      category: ((r[4] ?? 'bento').trim() as MenuItemFromSheet['category']),
+      image_path: (r[5] ?? '').trim(),
+      available: (r[7] ?? 'TRUE').toUpperCase() !== 'FALSE',
+      sort_order: parseInt((r[6] ?? '99').trim(), 10),
+    }))
+    .sort((a, b) => a.sort_order - b.sort_order)
+}
+
+

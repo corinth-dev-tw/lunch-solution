@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { Store, Clock, Tag } from 'lucide-react'
+import { Store, Tag } from 'lucide-react'
 import { Restaurant } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -23,7 +23,7 @@ export default function RestaurantGrid({ restaurants, loading, onSelect }: Resta
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {[...Array(6)].map((_, i) => (
-          <div key={i} className="bg-white/5 rounded-2xl h-64 animate-pulse" />
+          <div key={i} className="bg-gray-100 rounded-2xl h-64 animate-pulse" />
         ))}
       </div>
     )
@@ -31,7 +31,7 @@ export default function RestaurantGrid({ restaurants, loading, onSelect }: Resta
 
   if (restaurants.length === 0) {
     return (
-      <div className="text-center py-16 text-white/50">
+      <div className="text-center py-16 text-gray-400">
         <Store size={48} className="mx-auto mb-4 opacity-50" />
         <p className="text-lg">此地點目前無可訂餐廳</p>
       </div>
@@ -44,7 +44,7 @@ export default function RestaurantGrid({ restaurants, loading, onSelect }: Resta
         <button
           key={restaurant.id}
           onClick={() => onSelect(restaurant)}
-          className="group text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-green-400/30 rounded-2xl overflow-hidden transition-all hover:scale-[1.02] hover:shadow-xl hover:shadow-green-500/10"
+          className="group text-left bg-white hover:bg-gray-50 border border-gray-200 hover:border-amber-400 rounded-2xl overflow-hidden transition-all hover:scale-[1.02] hover:shadow-xl shadow-sm"
         >
           <div className="relative h-44 overflow-hidden">
             <img
@@ -60,13 +60,9 @@ export default function RestaurantGrid({ restaurants, loading, onSelect }: Resta
             )}
           </div>
           <div className="p-4">
-            <h3 className="text-white font-bold text-base mb-1">{restaurant.name_zh}</h3>
-            <p className="text-white/50 text-xs mb-3 line-clamp-2">{restaurant.description}</p>
-            <div className="flex items-center gap-3 text-xs text-white/60">
-              <span className="flex items-center gap-1">
-                <Clock size={12} />
-                截單時間 {String(restaurant.cutoff_hour).padStart(2, '0')}:00
-              </span>
+            <h3 className="text-gray-900 font-bold text-base mb-1">{restaurant.name_zh}</h3>
+            <p className="text-gray-500 text-xs mb-3 line-clamp-2">{restaurant.description}</p>
+            <div className="flex items-center gap-3 text-xs text-gray-500">
               {restaurant.min_order > 0 && (
                 <span className="flex items-center gap-1">
                   <Tag size={12} />
