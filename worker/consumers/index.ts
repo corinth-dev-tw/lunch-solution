@@ -20,6 +20,9 @@ async function getLineMessaging() {
   return mod
 }
 
+// Exponential backoff: attempt 1→30s, 2→120s, 3→300s (5 min), then DLQ
+const RETRY_DELAYS_SEC = [30, 120, 300]
+
 export async function handleQueue(
   batch: MessageBatch<QueueMsg>,
   env: Env
@@ -29,8 +32,10 @@ export async function handleQueue(
       await processMessage(msg.body, env)
       msg.ack()
     } catch (e) {
-      console.error(`Queue consumer error [${msg.body.type}]:`, e)
-      msg.retry()
+      const attempt = msg.attempts ?? 1
+      const delaySeconds = RETRY_DELAYS_SEC[attempt - 1] ?? RETRY_DELAYS_SEC.at(-1)!
+      console.error(`Queue consumer error [${msg.body.type}] attempt ${attempt}/${RETRY_DELAYS_SEC.length + 1}, retrying in ${delaySeconds}s:`, e)
+      msg.retry({ delaySeconds })
     }
   }
 }

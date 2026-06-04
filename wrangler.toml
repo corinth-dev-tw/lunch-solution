@@ -12,6 +12,7 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "lunch-db"
 database_id = "60936f3e-5628-4d7e-a82e-95b06a281ebb"
+migrations_dir = "./drizzle/migrations"
 
 [[kv_namespaces]]
 binding = "CACHE"
@@ -27,12 +28,67 @@ max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 3
 dead_letter_queue = "lunch-order-jobs-dlq"
+# Retry delay is handled per-message in consumers/index.ts using msg.retry({ delaySeconds })
 
-# Custom domain only on production — branch builds use *.workers.dev preview URL
+[vars]
+APP_URL = "https://lunch.antu-technology.com"
+
+# ── Staging environment ────────────────────────────────────────────────────────
+# Deploy with: wrangler deploy --env staging
+[env.staging]
+workers_dev = true
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "lunch-db-staging"
+database_id = "60936f3e-5628-4d7e-a82e-95b06a281ebb"   # replace with staging DB ID
+migrations_dir = "./drizzle/migrations"
+
+[[env.staging.kv_namespaces]]
+binding = "CACHE"
+id = "1a8dc17b416348d5992b53a050b968d4"    # replace with staging KV ID
+
+[[env.staging.queues.producers]]
+binding = "ORDER_QUEUE"
+queue = "lunch-order-jobs-staging"
+
+[[env.staging.queues.consumers]]
+queue = "lunch-order-jobs-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "lunch-order-jobs-staging-dlq"
+
+[env.staging.vars]
+APP_URL = "https://lunch-staging.antu-technology.com"
+
+# ── Production environment ─────────────────────────────────────────────────────
+# Deploy with: wrangler deploy --env production
 [env.production]
 routes = [
   { pattern = "lunch.antu-technology.com", custom_domain = true }
 ]
 
-[vars]
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "lunch-db"
+database_id = "60936f3e-5628-4d7e-a82e-95b06a281ebb"
+migrations_dir = "./drizzle/migrations"
+
+[[env.production.kv_namespaces]]
+binding = "CACHE"
+id = "1a8dc17b416348d5992b53a050b968d4"
+
+[[env.production.queues.producers]]
+binding = "ORDER_QUEUE"
+queue = "lunch-order-jobs"
+
+[[env.production.queues.consumers]]
+queue = "lunch-order-jobs"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "lunch-order-jobs-dlq"
+
+[env.production.vars]
 APP_URL = "https://lunch.antu-technology.com"
