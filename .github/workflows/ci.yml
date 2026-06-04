@@ -24,10 +24,24 @@ jobs:
         # whose lockfile entries differ between macOS and Linux.
         run: npm install --prefer-offline
 
-      - name: Build (OpenNext → Cloudflare)
+      - name: Detect build type
+        id: detect
+        run: |
+          if npm run | grep -q "cf:build"; then
+            echo "type=nextjs" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=hono" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build — Next.js / OpenNext (legacy)
+        if: steps.detect.outputs.type == 'nextjs'
         run: npm run cf:build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+
+      - name: Build — Vite UI (Hono/Cloudflare-native)
+        if: steps.detect.outputs.type == 'hono'
+        run: npm run build:ui
 
       - name: Deploy (main branch only)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

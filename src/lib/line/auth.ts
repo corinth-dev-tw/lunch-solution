@@ -1,4 +1,3 @@
-import crypto from 'crypto'
 import { LineProfile } from '@/types'
 import { b64uDecode } from '@/lib/b64url'
 
@@ -7,8 +6,14 @@ const LINE_TOKEN_URL = 'https://api.line.me/oauth2/v2.1/token'
 const LINE_PROFILE_URL = 'https://api.line.me/v2/profile'
 const LINE_VERIFY_URL = 'https://api.line.me/oauth2/v2.1/verify'
 
+function randomHex(bytes = 16): string {
+  const arr = new Uint8Array(bytes)
+  crypto.getRandomValues(arr)
+  return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 export function generateState(): string {
-  return crypto.randomBytes(16).toString('hex')
+  return randomHex(16)
 }
 
 export function buildLineAuthUrl(state: string, nonce: string): string {

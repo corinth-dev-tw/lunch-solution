@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { getRestaurants } from '@/lib/google/registry'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
@@ -12,20 +12,28 @@ export async function GET(req: NextRequest) {
 
   const dayOfWeek = new Date(date + 'T12:00:00').getDay() // 0=Sun
 
-  let supabase
   try {
-    supabase = await createServiceClient()
-  } catch {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
+    const restaurants = await getRestaurants(locationId, dayOfWeek)
+    return NextResponse.json({
+      restaurants: restaurants.map((r) => ({
+        id: r.slug,
+        name: r.slug,
+        name_zh: r.name_zh,
+        description: r.tagline,
+        image_url: r.banner_path,
+        location_ids: r.location_ids,
+        available_days: r.available_days,
+        cutoff_hour: r.cutoff_hour,
+        min_order: r.min_order,
+        delivery_fee: r.delivery_fee,
+      })),
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
+      },
+    })
+  } catch (e) {
+    console.error('Restaurants API error:', e)
+    return NextResponse.json({ error: 'Failed to fetch restaurants' }, { status: 500 })
   }
-
-  const { data, error } = await supabase
-    .from('restaurants')
-    .select('*')
-    .eq('active', true)
-    .contains('location_ids', [locationId])
-    .contains('available_days', [dayOfWeek])
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ restaurants: data ?? [] })
 }

@@ -1,19 +1,10 @@
-
 import { NextRequest, NextResponse } from 'next/server'
-import { buildLineAuthUrl } from '@/lib/line/auth'
-
-function randomHex(bytes = 16): string {
-  const arr = new Uint8Array(bytes)
-  crypto.getRandomValues(arr)
-  return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('')
-}
+import { buildLineAuthUrl, generateState } from '@/lib/line/auth'
 
 export async function GET(req: NextRequest) {
-  const rawRedirect = req.nextUrl.searchParams.get('redirect') ?? '/'
-  // Only allow same-origin relative paths to prevent open redirect attacks
-  const redirect = /^\/(?:[^/\\]|$)/.test(rawRedirect) ? rawRedirect : '/'
-  const state = randomHex()
-  const nonce = randomHex()
+  const redirect = req.nextUrl.searchParams.get('redirect') ?? '/'
+  const state = generateState()
+  const nonce = generateState()
 
   const response = NextResponse.redirect(buildLineAuthUrl(state, nonce))
   const cookieOpts = { httpOnly: true, secure: true, maxAge: 300, sameSite: 'lax' as const, path: '/' }

@@ -24,7 +24,7 @@ export default function XinyiMap({ selectedLocation, onSelectLocation }: XinyiMa
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
+      style: 'mapbox://styles/mapbox/light-v11',
       center: XINYI_CENTER,
       zoom: 15.5,
       pitch: 55,
@@ -54,15 +54,15 @@ export default function XinyiMap({ selectedLocation, onSelectLocation }: XinyiMa
               'interpolate',
               ['linear'],
               ['get', 'height'],
-              0, '#1a2a4a',
-              50, '#1e3a6e',
-              100, '#2563eb',
-              200, '#3b82f6',
-              400, '#60a5fa',
+              0, '#e5e7eb',
+              50, '#d1d5db',
+              100, '#9ca3af',
+              200, '#6b7280',
+              400, '#4b5563',
             ],
             'fill-extrusion-height': ['get', 'height'],
             'fill-extrusion-base': ['get', 'min_height'],
-            'fill-extrusion-opacity': 0.85,
+            'fill-extrusion-opacity': 0.75,
           },
         },
         labelLayerId
@@ -72,18 +72,15 @@ export default function XinyiMap({ selectedLocation, onSelectLocation }: XinyiMa
       XINYI_LOCATIONS.forEach((loc) => {
         const el = document.createElement('div')
         el.className = 'location-marker'
-
-        const pin = document.createElement('div')
-        pin.className = `marker-pin ${selectedLocation?.id === loc.id ? 'selected' : ''}`
-        // SVG is fully static — no user data interpolated
-        pin.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#ef4444"/><circle cx="12" cy="9" r="2.5" fill="white"/></svg>'
-
-        const label = document.createElement('div')
-        label.className = 'marker-label'
-        label.textContent = loc.name_zh
-
-        el.appendChild(pin)
-        el.appendChild(label)
+        el.innerHTML = `
+          <div class="marker-pin ${selectedLocation?.id === loc.id ? 'selected' : ''}">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#f59e0b"/>
+              <circle cx="12" cy="9" r="2.5" fill="white"/>
+            </svg>
+          </div>
+          <div class="marker-label">${loc.name_zh}</div>
+        `
         el.addEventListener('click', () => onSelectLocation(loc))
 
         const marker = new mapboxgl.Marker(el)
@@ -136,8 +133,8 @@ export default function XinyiMap({ selectedLocation, onSelectLocation }: XinyiMa
         .marker-pin.selected { transform: scale(1.3); }
         .marker-pin.selected path { fill: #22c55e !important; }
         .marker-label {
-          background: rgba(0,0,0,0.75);
-          color: white;
+          background: rgba(255,255,255,0.9);
+          color: #374151;
           font-size: 11px;
           padding: 2px 6px;
           border-radius: 4px;
@@ -145,12 +142,13 @@ export default function XinyiMap({ selectedLocation, onSelectLocation }: XinyiMa
           margin-top: 2px;
           font-family: system-ui, sans-serif;
           pointer-events: none;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
       `}</style>
       <div ref={containerRef} className="w-full h-full" />
       {!loaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-900">
-          <div className="text-white text-lg animate-pulse">載入地圖中...</div>
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+          <div className="text-gray-500 text-lg animate-pulse">載入地圖中...</div>
         </div>
       )}
     </>

@@ -42,5 +42,9 @@ next-env.d.ts
 .env.local
 .dev.vars
 .vercel
-.open-next
-.next
+.open-next/
+.next/
+.wrangler/
+public/
+playwright-report/
+test-results/

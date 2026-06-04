@@ -55,7 +55,7 @@ export async function GET(
       sheetsReady: true,
       restaurant: config.name_zh,
       spreadsheetId: config.spreadsheet_id,
-      message: `✅ 成功寫入 ${config.name_zh} 的 Google Sheet！請查看 ${tomorrow} 分頁`,
+      message: `成功寫入 ${config.name_zh} 的 Google Sheet！請查看 ${tomorrow} 分頁`,
     })
   } catch (e) {
     console.error(`[test-sheets] write error for ${restaurant}:`, e)
