@@ -32,7 +32,6 @@ export async function POST(req: NextRequest) {
     deliveryDate,
     items,
     couponCode,
-    discount: clientDiscount,
     note,
     customerName,
     company,
@@ -75,11 +74,6 @@ export async function POST(req: NextRequest) {
         validatedCouponCode = couponCode
       }
     }
-  }
-
-  // Allow client-provided discount if coupon validation passed
-  if (clientDiscount !== undefined && clientDiscount <= discount) {
-    discount = clientDiscount
   }
 
   const deliveryFee = config.delivery_fee ?? 0

@@ -12,8 +12,9 @@ import { signSession } from '@/lib/auth'
 import { upsertMember } from '@/lib/google/registry'
 
 export async function GET(req: NextRequest) {
-  if (process.env.NODE_ENV === 'production') {
-    return NextResponse.json({ error: 'Not available in production' }, { status: 403 })
+  // Require explicit opt-in; NODE_ENV alone is not reliable in edge runtimes
+  if (process.env.ENABLE_DEBUG_ENDPOINTS !== 'true') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
   const redirect = req.nextUrl.searchParams.get('redirect') ?? '/my-orders'

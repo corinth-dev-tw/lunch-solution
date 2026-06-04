@@ -21,8 +21,15 @@ export async function GET(
     menu = DEV_MENU.filter((m) => m.restaurant_slug === restaurant && m.available)
   }
 
-  // Strip internal fields from client response
-  const { spreadsheet_id: _, line_channel_id: __, line_channel_secret: ___, line_channel_access_token: ____, ...safeConfig } = config
+  // Strip internal / secret fields from client response
+  const {
+    spreadsheet_id: _,
+    line_channel_id: __,
+    line_channel_secret: ___,
+    line_channel_access_token: ____,
+    api_key: _____,        // webhook HMAC signing key — must never reach the client
+    ...safeConfig
+  } = config
 
   return NextResponse.json(
     { config: safeConfig, menu },

@@ -117,7 +117,7 @@ export default new Hono<{ Bindings: Env }>()
     if (!token) return c.json({ session: null }, 401)
     try {
       const { jwtVerify } = await import('jose')
-      const secret = new TextEncoder().encode(c.env.SESSION_SECRET || c.env.LINE_LOGIN_CHANNEL_SECRET)
+      const secret = new TextEncoder().encode(c.env.SESSION_SECRET)
       const { payload } = await jwtVerify(token, secret, { clockTolerance: 60 })
       return c.json({
         session: {

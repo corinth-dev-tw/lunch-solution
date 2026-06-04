@@ -33,7 +33,8 @@ const createOrderSchema = z.object({
 
 function generateOrderNumber(): string {
   const datePart = formatInTimeZone(new Date(), 'Asia/Taipei', 'yyyyMMdd')
-  const rand = Math.random().toString(36).substring(2, 7).toUpperCase()
+  // 10 hex chars from crypto.randomUUID() — 40 bits of entropy, no collision check needed
+  const rand = crypto.randomUUID().replace(/-/g, '').substring(0, 10).toUpperCase()
   return `LN-${datePart}-${rand}`
 }
 

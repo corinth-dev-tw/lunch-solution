@@ -57,7 +57,7 @@ export const DEV_RESTAURANTS: RestaurantConfig[] = [
     available_days: [1, 2, 3, 4, 5],
     min_order: 0,
     delivery_fee: 0,
-    api_key: 'dev-key-siammore',
+    api_key: '',           // intentionally empty — dev fallback must not carry real keys
     line_channel_id: '',
     line_channel_secret: '',
     line_channel_access_token: '',

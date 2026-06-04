@@ -1,9 +1,9 @@
 import { SignJWT, jwtVerify } from 'jose'
 
 function getSecret(): Uint8Array {
-  const raw = process.env.SESSION_SECRET || process.env.LINE_LOGIN_CHANNEL_SECRET
+  const raw = process.env.SESSION_SECRET
   if (!raw) {
-    throw new Error('SESSION_SECRET or LINE_LOGIN_CHANNEL_SECRET must be set')
+    throw new Error('SESSION_SECRET must be set (do not reuse LINE_LOGIN_CHANNEL_SECRET)')
   }
   return new TextEncoder().encode(raw)
 }

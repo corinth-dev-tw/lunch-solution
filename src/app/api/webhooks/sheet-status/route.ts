@@ -12,11 +12,16 @@ async function verifySignature(payload: string, secret: string, signature: strin
     encoder.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign', 'verify']
   )
-  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(payload))
-  const expected = btoa(String.fromCharCode(...new Uint8Array(sig)))
-  return expected === signature
+  let sigBytes: Uint8Array
+  try {
+    sigBytes = Uint8Array.from(atob(signature), (c) => c.charCodeAt(0))
+  } catch {
+    return false
+  }
+  // Constant-time comparison to prevent timing side-channels
+  return crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(payload))
 }
 
 export async function POST(req: NextRequest) {

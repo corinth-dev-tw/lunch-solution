@@ -9,9 +9,15 @@ export async function verifySheetsSig(
     new TextEncoder().encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign', 'verify']
   )
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
-  const expected = btoa(String.fromCharCode(...new Uint8Array(sig)))
-  return expected === signature
+  // Decode the incoming signature to raw bytes
+  let sigBytes: Uint8Array
+  try {
+    sigBytes = Uint8Array.from(atob(signature), (c) => c.charCodeAt(0))
+  } catch {
+    return false
+  }
+  // Use constant-time verify to prevent timing side-channels
+  return crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(payload))
 }

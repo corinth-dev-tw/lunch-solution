@@ -13,8 +13,27 @@ import webhookRoutes from './routes/webhooks'
 const app = new Hono<{ Bindings: Env }>()
 
 app.use('*', logger())
+
+// Security headers on all responses
+app.use('*', async (c, next) => {
+  await next()
+  c.res.headers.set('X-Content-Type-Options', 'nosniff')
+  c.res.headers.set('X-Frame-Options', 'DENY')
+  c.res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  c.res.headers.set('Permissions-Policy', 'geolocation=(), camera=(), microphone=()')
+  if (c.req.url.startsWith('https://')) {
+    c.res.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
+})
 app.use('/api/*', cors({
-  origin: (origin) => origin, // same-origin: Workers Assets serve the SPA
+  origin: (origin, c) => {
+    const allowed = [
+      c.env.APP_URL,
+      'http://localhost:3000',
+      'http://localhost:5173',
+    ].filter(Boolean)
+    return allowed.includes(origin) ? origin : null
+  },
   allowHeaders: ['Content-Type', 'Authorization', 'x-restaurant-key'],
   allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true,
