@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Trash2, Tag, FileText } from 'lucide-react'
 import { CartItem } from '@/types'
 import { cn } from '@/lib/utils'
@@ -32,6 +32,15 @@ export default function OrderCart({
 
   const subtotal = cart.reduce((sum, item) => sum + item.menu_item.price * item.quantity, 0)
   const total = subtotal - couponDiscount + deliveryFee
+
+  // Clear any applied coupon when cart changes so stale discounts can't persist
+  useEffect(() => {
+    if (couponApplied) {
+      setCouponApplied(false)
+      setCouponDiscount(0)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart])
 
   async function applyCoupon() {
     if (!couponCode.trim()) return

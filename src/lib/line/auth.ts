@@ -1,4 +1,5 @@
 import { LineProfile } from '@/types'
+import { b64uDecode } from '@/lib/b64url'
 
 const LINE_AUTH_URL = 'https://access.line.me/oauth2/v2.1/authorize'
 const LINE_TOKEN_URL = 'https://api.line.me/oauth2/v2.1/token'
@@ -27,7 +28,12 @@ export function buildLineAuthUrl(state: string, nonce: string): string {
   return `${LINE_AUTH_URL}?${params.toString()}`
 }
 
-export async function exchangeCodeForToken(code: string): Promise<string> {
+export interface LineTokens {
+  access_token: string
+  id_token?: string
+}
+
+export async function exchangeCodeForToken(code: string): Promise<LineTokens> {
   const res = await fetch(LINE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -41,7 +47,17 @@ export async function exchangeCodeForToken(code: string): Promise<string> {
   })
   if (!res.ok) throw new Error('Failed to exchange LINE code for token')
   const data = await res.json()
-  return data.access_token as string
+  return { access_token: data.access_token as string, id_token: data.id_token as string | undefined }
+}
+
+export function extractNonceFromIdToken(idToken: string): string | null {
+  try {
+    const payloadB64 = idToken.split('.')[1]
+    const decoded = JSON.parse(new TextDecoder().decode(b64uDecode(payloadB64)))
+    return typeof decoded.nonce === 'string' ? decoded.nonce : null
+  } catch {
+    return null
+  }
 }
 
 export async function getLineProfile(accessToken: string): Promise<LineProfile> {
