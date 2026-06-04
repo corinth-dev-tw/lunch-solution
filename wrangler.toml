@@ -15,7 +15,7 @@ database_id = "60936f3e-5628-4d7e-a82e-95b06a281ebb"
 
 [[kv_namespaces]]
 binding = "CACHE"
-id = "preview_id_placeholder"
+id = "1a8dc17b416348d5992b53a050b968d4"
 
 [[queues.producers]]
 binding = "ORDER_QUEUE"
@@ -28,9 +28,11 @@ max_batch_timeout = 5
 max_retries = 3
 dead_letter_queue = "lunch-order-jobs-dlq"
 
-[[routes]]
-pattern = "lunch.antu-technology.com"
-custom_domain = true
+# Custom domain only on production — branch builds use *.workers.dev preview URL
+[env.production]
+routes = [
+  { pattern = "lunch.antu-technology.com", custom_domain = true }
+]
 
 [vars]
 APP_URL = "https://lunch.antu-technology.com"
