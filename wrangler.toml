@@ -41,12 +41,12 @@ workers_dev = true
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "lunch-db-staging"
-database_id = "60936f3e-5628-4d7e-a82e-95b06a281ebb"   # replace with staging DB ID
+database_id = "1625ef0f-67ac-4905-b406-4a77283a4c67"
 migrations_dir = "./drizzle/migrations"
 
 [[env.staging.kv_namespaces]]
 binding = "CACHE"
-id = "1a8dc17b416348d5992b53a050b968d4"    # replace with staging KV ID
+id = "24e547dddf64497e9691ff9ea9ff5a8b"
 
 [[env.staging.queues.producers]]
 binding = "ORDER_QUEUE"
