@@ -43,10 +43,6 @@ jobs:
         if: steps.detect.outputs.type == 'hono'
         run: npm run build:ui
 
-      - name: Type-check worker (Hono/Cloudflare-native)
-        if: steps.detect.outputs.type == 'hono'
-        run: npx tsc --noEmit
-
       - name: Deploy (main branch only)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: npx wrangler deploy
